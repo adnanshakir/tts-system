@@ -48,11 +48,12 @@ export function Select({ value, onValueChange, disabled, children }: SelectProps
 
 export interface SelectTriggerProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   className?: string;
+  hideChevron?: boolean;
   children?: React.ReactNode;
 }
 
 export const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
-  ({ className, children, ...props }, ref) => {
+  ({ className, hideChevron, children, ...props }, ref) => {
     const { open, setOpen } = useSelectContext();
     const triggerRef = React.useRef<HTMLButtonElement | null>(null);
 
@@ -73,14 +74,16 @@ export const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerPr
         {...props}
       >
         {children}
-        <svg
-          className={cn("h-3.5 w-3.5 text-zinc-400 transition-transform duration-200 shrink-0 ml-1", open && "rotate-180")}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-        </svg>
+        {!hideChevron && (
+          <svg
+            className={cn("h-3.5 w-3.5 text-zinc-400 transition-transform duration-200 shrink-0 ml-1", open && "rotate-180")}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        )}
       </button>
     );
   }

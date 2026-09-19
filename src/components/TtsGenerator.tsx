@@ -10,7 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { KOKORO_VOICES, SUPPORTED_LANGUAGES } from "@/types/tts";
+import { KOKORO_VOICES, SUPPORTED_LANGUAGES, type Language } from "@/types/tts";
+import { IconLanguage, IconMicrophone } from "@tabler/icons-react";
 
 const MODEL_OPTIONS: Record<string, string> = {
   kokoro: "Kokoro 82M",
@@ -24,7 +25,7 @@ export default function TtsGenerator() {
   const [text, setText] = useState<string>(
     "Hello! I am your AI voice agent powered by Kokoro. How can I assist you today?",
   );
-  const [selectedLanguage, setSelectedLanguage] = useState<string>("en");
+  const [selectedLanguage, setSelectedLanguage] = useState<Language>("en");
   const [selectedVoice, setSelectedVoice] = useState<string>("af_bella");
   const [selectedModel, setSelectedModel] = useState<string>("kokoro");
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -47,8 +48,9 @@ export default function TtsGenerator() {
 
   // Handle language switch
   const handleLanguageChange = (langId: string) => {
-    setSelectedLanguage(langId);
-    const available = KOKORO_VOICES.filter((v) => v.language === langId);
+    const lang = langId as Language;
+    setSelectedLanguage(lang);
+    const available = KOKORO_VOICES.filter((v) => v.language === lang);
     if (available.length > 0) {
       setSelectedVoice(available[0].id);
     }
@@ -90,6 +92,7 @@ export default function TtsGenerator() {
         },
         body: JSON.stringify({
           text: text.trim(),
+          language: selectedLanguage,
           voice: selectedVoice,
         }),
       });
@@ -302,90 +305,8 @@ export default function TtsGenerator() {
 
         {/* Bottom Toolbar inside prompt box */}
         <div className="flex items-center justify-between px-3 py-2.5 bg-zinc-50/80 border-t border-zinc-100 rounded-b-2xl gap-2 flex-wrap sm:flex-nowrap">
-          {/* Left Hand Side: Dropdowns for Language & Voice */}
+          {/* Left Hand Side: Model Selector & Character Counter */}
           <div className="flex items-center gap-2">
-            {/* Language Selector Dropdown */}
-            <div className="w-[125px]">
-              <Select
-                value={selectedLanguage}
-                onValueChange={handleLanguageChange}
-                disabled={isLoading}
-              >
-                <SelectTrigger className="h-8 text-xs bg-white">
-                  <div className="flex items-center gap-1.5 truncate">
-                    <svg
-                      className="w-3.5 h-3.5 text-zinc-500 shrink-0"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 002 2h1.5a2.5 2.5 0 002.5-2.5V11a2 2 0 012-2h1.055M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    <SelectValue>
-                      {currentLangObj?.name || "Language"}
-                    </SelectValue>
-                  </div>
-                </SelectTrigger>
-                <SelectContent side="bottom" align="start">
-                  {SUPPORTED_LANGUAGES.map((lang) => (
-                    <SelectItem key={lang.id} value={lang.id}>
-                      {lang.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Voice Selector Dropdown */}
-            <div className="w-[155px] sm:w-[175px]">
-              <Select
-                value={selectedVoice}
-                onValueChange={setSelectedVoice}
-                disabled={isLoading}
-              >
-                <SelectTrigger className="h-8 text-xs bg-white">
-                  <div className="flex items-center gap-1.5 truncate">
-                    <svg
-                      className="w-3.5 h-3.5 text-zinc-500 shrink-0"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"
-                      />
-                    </svg>
-                    <SelectValue>
-                      {currentVoiceObj?.name || "Voice"}
-                    </SelectValue>
-                  </div>
-                </SelectTrigger>
-                <SelectContent side="bottom" align="start">
-                  {filteredVoices.map((voice) => (
-                    <SelectItem key={voice.id} value={voice.id}>
-                      {voice.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Right Hand Side: Character Counter, Model Selector Dropdown & Icon-Only Generate Button */}
-          <div className="flex items-center gap-2">
-            {/* Character Count */}
-            <span className="text-[11px] select-none font-mono text-zinc-400 px-1">
-              {text.length}/2000
-            </span>
-
             {/* Model Selector Dropdown with Full Name display */}
             <div className="w-auto min-w-[120px] max-w-[185px]">
               <Select
@@ -415,7 +336,7 @@ export default function TtsGenerator() {
                 </SelectTrigger>
                 <SelectContent
                   side="bottom"
-                  align="end"
+                  align="start"
                   className="min-w-[190px]"
                 >
                   <SelectItem value="kokoro">Kokoro 82M</SelectItem>
@@ -433,6 +354,80 @@ export default function TtsGenerator() {
                   </SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Character Count */}
+            <span className="text-[11px] select-none font-mono text-zinc-400 px-1">
+              {text.length}/2000
+            </span>
+          </div>
+
+          {/* Right Hand Side: Icon-Only Dropdowns for Language & Voice + Icon-Only Generate Button */}
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            {/* Language Selector (Icon-Only with Tooltip & Grayish Hover BG) */}
+            <div className="relative group">
+              <Select
+                value={selectedLanguage}
+                onValueChange={handleLanguageChange}
+                disabled={isLoading}
+              >
+                <SelectTrigger
+                  hideChevron
+                  className="h-8 w-8 p-0 border-none bg-transparent text-zinc-600 hover:bg-zinc-200/80 hover:text-zinc-900 transition-colors rounded-lg flex items-center justify-center shadow-none"
+                >
+                  <IconLanguage className="w-4 h-4" />
+                </SelectTrigger>
+                <SelectContent
+                  side="bottom"
+                  align="end"
+                  className="min-w-[140px]"
+                >
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <SelectItem key={lang.id} value={lang.id}>
+                      {lang.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Tooltip */}
+              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center justify-center px-2.5 py-1 bg-zinc-900 text-white text-[11px] font-medium rounded-md shadow-md whitespace-nowrap pointer-events-none z-30 animate-in fade-in duration-150">
+                Language: {currentLangObj?.name || "Language"}
+                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-900" />
+              </div>
+            </div>
+
+            {/* Voice Selector (Icon-Only with Tooltip & Grayish Hover BG) */}
+            <div className="relative group">
+              <Select
+                value={selectedVoice}
+                onValueChange={setSelectedVoice}
+                disabled={isLoading}
+              >
+                <SelectTrigger
+                  hideChevron
+                  className="h-8 w-8 p-0 border-none bg-transparent text-zinc-600 hover:bg-zinc-200/80 hover:text-zinc-900 transition-colors rounded-lg flex items-center justify-center shadow-none"
+                >
+                  <IconMicrophone className="w-4 h-4" />
+                </SelectTrigger>
+                <SelectContent
+                  side="bottom"
+                  align="end"
+                  className="min-w-[185px]"
+                >
+                  {filteredVoices.map((voice) => (
+                    <SelectItem key={voice.id} value={voice.id}>
+                      {voice.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Tooltip */}
+              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center justify-center px-2.5 py-1 bg-zinc-900 text-white text-[11px] font-medium rounded-md shadow-md whitespace-nowrap pointer-events-none z-30 animate-in fade-in duration-150">
+                Voice: {currentVoiceObj?.name || "Voice"}
+                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-900" />
+              </div>
             </div>
 
             {/* Icon-Only Generate Button */}
