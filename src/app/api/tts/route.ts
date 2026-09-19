@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTTS } from "@/services/tts/kokoro";
 
+// Allow up to 60 seconds duration for model loading and TTS generation on Vercel
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
@@ -43,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     const errorMessage = error?.message || "Failed to generate audio stream.";
     return NextResponse.json(
-      { error: errorMessage },
+      { error: errorMessage, details: String(error) },
       { status: 500 }
     );
   }
