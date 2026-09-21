@@ -1,5 +1,5 @@
 {
-  "installCommand": "npm pkg set 'overrides.onnxruntime-node'='npm:onnxruntime-web@*' && npm install",
+  "installCommand": "bash scripts/vercel-install.sh",
   "functions": {
     "src/app/api/tts/route.ts": {
       "maxDuration": 60,
