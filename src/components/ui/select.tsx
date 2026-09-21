@@ -25,12 +25,34 @@ function useSelectContext() {
 export interface SelectProps {
   value: string;
   onValueChange: (value: string) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   disabled?: boolean;
   children: React.ReactNode;
 }
 
-export function Select({ value, onValueChange, disabled, children }: SelectProps) {
-  const [open, setOpen] = React.useState(false);
+export function Select({
+  value,
+  onValueChange,
+  open: controlledOpen,
+  onOpenChange,
+  disabled,
+  children,
+}: SelectProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+
+  const setOpen = React.useCallback(
+    (newOpen: boolean) => {
+      if (disabled) return;
+      if (controlledOpen === undefined) {
+        setUncontrolledOpen(newOpen);
+      }
+      onOpenChange?.(newOpen);
+    },
+    [disabled, controlledOpen, onOpenChange],
+  );
+
   const [labels, setLabels] = React.useState<Record<string, React.ReactNode>>({});
 
   const registerLabel = React.useCallback((val: string, label: React.ReactNode) => {
@@ -39,7 +61,7 @@ export function Select({ value, onValueChange, disabled, children }: SelectProps
 
   return (
     <SelectContext.Provider
-      value={{ value, onValueChange, open, setOpen: disabled ? () => {} : setOpen, labels, registerLabel }}
+      value={{ value, onValueChange, open, setOpen, labels, registerLabel }}
     >
       <div className="relative inline-block w-full">{children}</div>
     </SelectContext.Provider>
@@ -48,11 +70,12 @@ export function Select({ value, onValueChange, disabled, children }: SelectProps
 
 export interface SelectTriggerProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   className?: string;
+  hideChevron?: boolean;
   children?: React.ReactNode;
 }
 
 export const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
-  ({ className, children, ...props }, ref) => {
+  ({ className, hideChevron, children, ...props }, ref) => {
     const { open, setOpen } = useSelectContext();
     const triggerRef = React.useRef<HTMLButtonElement | null>(null);
 
@@ -73,14 +96,16 @@ export const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerPr
         {...props}
       >
         {children}
-        <svg
-          className={cn("h-3.5 w-3.5 text-zinc-400 transition-transform duration-200 shrink-0 ml-1", open && "rotate-180")}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-        </svg>
+        {!hideChevron && (
+          <svg
+            className={cn("h-3.5 w-3.5 text-zinc-400 transition-transform duration-200 shrink-0 ml-1", open && "rotate-180")}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        )}
       </button>
     );
   }

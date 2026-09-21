@@ -1,486 +1,188 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { KOKORO_VOICES, SUPPORTED_LANGUAGES } from "@/types/tts";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { KOKORO_VOICES, SUPPORTED_LANGUAGES, type Language } from "@/types/tts";
+import WelcomeHeader from "./tts/WelcomeHeader";
+import ChatFeed from "./tts/ChatFeed";
+import ChatInput from "./tts/ChatInput";
+import type { ChatMessageData } from "./tts/ChatMessage";
 
-const MODEL_OPTIONS: Record<string, string> = {
-  kokoro: "Kokoro 82M",
-  elevenlabs: "ElevenLabs (Coming Soon)",
-  xtts: "XTTS v2 (Coming Soon)",
-  chattts: "ChatTTS (Coming Soon)",
-  f5tts: "F5-TTS (Coming Soon)",
-};
+let messageIdCounter = 0;
+function nextId() {
+  messageIdCounter += 1;
+  return `msg-${Date.now()}-${messageIdCounter}`;
+}
 
 export default function TtsGenerator() {
-  const [text, setText] = useState<string>(
-    "Hello! I am your AI voice agent powered by Kokoro. How can I assist you today?",
-  );
-  const [selectedLanguage, setSelectedLanguage] = useState<string>("en");
-  const [selectedVoice, setSelectedVoice] = useState<string>("af_bella");
-  const [selectedModel, setSelectedModel] = useState<string>("kokoro");
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [lastGeneratedInfo, setLastGeneratedInfo] = useState<{
-    text: string;
-    voiceName: string;
-    languageName: string;
-    timestamp: string;
-  } | null>(null);
+  const [messages, setMessages] = useState<ChatMessageData[]>([]);
+  const audioUrlsRef = useRef<string[]>([]);
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  // Filter voices by selected language
-  const filteredVoices = KOKORO_VOICES.filter(
-    (voice) => voice.language === selectedLanguage,
-  );
-
-  // Handle language switch
-  const handleLanguageChange = (langId: string) => {
-    setSelectedLanguage(langId);
-    const available = KOKORO_VOICES.filter((v) => v.language === langId);
-    if (available.length > 0) {
-      setSelectedVoice(available[0].id);
-    }
-  };
-
-  // Auto-resize textarea logic up to max limit (200px)
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (el) {
-      el.style.height = "auto";
-      const newHeight = Math.min(el.scrollHeight, 200);
-      el.style.height = `${newHeight}px`;
-    }
-  }, [text]);
-
-  // Revoke Object URL on cleanup to prevent memory leaks
+  // Cleanup all blob URLs on unmount
   useEffect(() => {
     return () => {
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
-      }
+      audioUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [audioUrl]);
+  }, []);
 
-  const handleGenerate = async () => {
-    if (!text.trim()) {
-      setError("Please enter a prompt for your voice agent.");
-      return;
-    }
+  const generateAudio = useCallback(
+    async (
+      text: string,
+      language: Language,
+      voice: string,
+      assistantMsgId: string,
+    ) => {
+      try {
+        const response = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, language, voice }),
+        });
 
-    setIsLoading(true);
-    setError(null);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Server error (${response.status})`);
+        }
 
-    try {
-      const response = await fetch("/api/tts", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          text: text.trim(),
-          voice: selectedVoice,
-        }),
-      });
+        const blob = await response.blob();
+        const audioUrl = URL.createObjectURL(blob);
+        audioUrlsRef.current.push(audioUrl);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Server error (${response.status})`);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId
+              ? { ...m, status: "done" as const, audioUrl }
+              : m,
+          ),
+        );
+      } catch (err: unknown) {
+        console.error("TTS generation error:", err);
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : "An error occurred while generating speech.";
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId
+              ? {
+                  ...m,
+                  status: "error" as const,
+                  error: errorMessage,
+                }
+              : m,
+          ),
+        );
       }
+    },
+    [],
+  );
 
-      const blob = await response.blob();
+  const handleRetry = useCallback(
+    (messageId: string) => {
+      const assistantIdx = messages.findIndex((m) => m.id === messageId);
+      if (assistantIdx === -1) return;
 
-      // Clean up previous blob URL
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
+      const assistantMsg = messages[assistantIdx];
+      let userMsg: ChatMessageData | null = null;
+      for (let i = assistantIdx - 1; i >= 0; i--) {
+        if (messages[i].type === "user") {
+          userMsg = messages[i];
+          break;
+        }
       }
+      if (!userMsg) return;
 
-      const newUrl = URL.createObjectURL(blob);
-      setAudioUrl(newUrl);
-
-      const voiceObj = KOKORO_VOICES.find((v) => v.id === selectedVoice);
-      const langObj = SUPPORTED_LANGUAGES.find(
-        (l) => l.id === selectedLanguage,
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, status: "loading" as const, error: undefined }
+            : m,
+        ),
       );
 
-      setLastGeneratedInfo({
-        text: text.trim(),
-        voiceName: voiceObj ? voiceObj.name : selectedVoice,
-        languageName: langObj ? langObj.name : selectedLanguage,
-        timestamp: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
+      const language =
+        (assistantMsg.languageName
+          ? (SUPPORTED_LANGUAGES.find((l) => l.name === assistantMsg.languageName)
+              ?.id as Language)
+          : "en") || "en";
+
+      generateAudio(
+        userMsg.text,
+        language,
+        assistantMsg.voice || "af_bella",
+        messageId,
+      );
+    },
+    [generateAudio, messages],
+  );
+
+  const handleSend = useCallback(
+    (
+      text: string,
+      settings: { language: Language; voice: string; model: string },
+    ) => {
+      const timestamp = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
       });
 
-      // Auto-play generated audio once loaded
-      setTimeout(() => {
-        if (audioRef.current) {
-          audioRef.current.play().catch(() => {
-            // Autoplay policy restriction fallback
-          });
-        }
-      }, 150);
-    } catch (err: any) {
-      console.error("TTS generation error:", err);
-      setError(err.message || "An error occurred while generating speech.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      const voiceObj = KOKORO_VOICES.find((v) => v.id === settings.voice);
+      const langObj = SUPPORTED_LANGUAGES.find((l) => l.id === settings.language);
 
-  const currentLangObj = SUPPORTED_LANGUAGES.find(
-    (l) => l.id === selectedLanguage,
+      const userMsgId = nextId();
+      const assistantMsgId = nextId();
+
+      const userMsg: ChatMessageData = {
+        id: userMsgId,
+        type: "user",
+        text,
+        timestamp,
+        status: "done",
+      };
+
+      const assistantMsg: ChatMessageData = {
+        id: assistantMsgId,
+        type: "assistant",
+        text,
+        voiceName: voiceObj?.name || settings.voice,
+        languageName: langObj?.name || settings.language,
+        voice: settings.voice,
+        timestamp,
+        status: "loading",
+      };
+
+      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+
+      // Fire the API call
+      generateAudio(text, settings.language, settings.voice, assistantMsgId);
+    },
+    [generateAudio],
   );
-  const currentVoiceObj = KOKORO_VOICES.find((v) => v.id === selectedVoice);
 
+  const hasMessages = messages.length > 0;
+
+  // ── Empty state: heading + centered input ──
+  if (!hasMessages) {
+    return (
+      <div className="w-full max-w-2xl mx-auto flex flex-col h-[calc(100vh-44px)] items-center justify-center">
+        <WelcomeHeader />
+        <div className="w-full mt-4">
+          <ChatInput onSend={handleSend} />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Chat state: feed fills space, input pinned at bottom ──
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-6 pb-16">
-      {/* Impactful Headline */}
-      <div className="text-center space-y-2 mb-8 select-none">
-        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-zinc-900 shadow-zinc-700">
-          What should your voice agent say?
-        </h1>
+    <div className="w-full max-w-2xl mx-auto flex flex-col h-[calc(100vh-44px)]">
+      {/* Chat feed takes all available space */}
+      <div className="flex-1 overflow-hidden flex flex-col pt-2 min-h-0">
+        <ChatFeed messages={messages} onRetry={handleRetry} />
       </div>
 
-      {/* AUDIO OUTPUT DISPLAYED ON TOP OF THE TEXTAREA WHEN GENERATED */}
-      {audioUrl && (
-        <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-5 space-y-4 animate-in fade-in slide-in-from-top-3 duration-250">
-          {/* Audio Output Header */}
-          <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-xs font-semibold text-zinc-800 uppercase tracking-wide">
-                Generated Audio
-              </span>
-              <Badge
-                variant="secondary"
-                className="text-[11px] bg-zinc-100 text-zinc-700"
-              >
-                {lastGeneratedInfo?.voiceName}
-              </Badge>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-zinc-400">
-                {lastGeneratedInfo?.timestamp}
-              </span>
-              <button
-                onClick={() => {
-                  if (audioUrl) URL.revokeObjectURL(audioUrl);
-                  setAudioUrl(null);
-                }}
-                className="text-zinc-400 hover:text-zinc-600 p-1 rounded-md transition-colors"
-                title="Close Audio"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          {/* HTML5 Audio Controls */}
-          <div className="bg-zinc-50 rounded-xl p-3 border border-zinc-100">
-            <audio
-              ref={audioRef}
-              controls
-              src={audioUrl}
-              className="w-full h-10 focus:outline-none"
-            >
-              Your browser does not support the audio element.
-            </audio>
-          </div>
-
-          {/* Transcription & Download Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-            <div className="text-xs text-zinc-600 italic bg-zinc-50 border border-zinc-100 px-3 py-2 rounded-lg flex-1 truncate">
-              "{lastGeneratedInfo?.text}"
-            </div>
-
-            <a
-              href={audioUrl}
-              download={`kokoro-${selectedVoice}-${Date.now()}.wav`}
-              className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-zinc-800 hover:text-zinc-950 bg-zinc-100 hover:bg-zinc-200 px-3.5 py-2 rounded-lg transition-colors shrink-0"
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                />
-              </svg>
-              Download WAV
-            </a>
-          </div>
-        </div>
-      )}
-
-      {/* Error Alert Box */}
-      {error && (
-        <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm flex items-start gap-3">
-          <svg
-            className="w-5 h-5 text-red-600 shrink-0 mt-0.5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <div className="flex-1">
-            <p className="font-semibold text-xs uppercase tracking-wider">
-              Generation Error
-            </p>
-            <p className="text-red-600 text-xs mt-0.5">{error}</p>
-          </div>
-          <button
-            onClick={() => setError(null)}
-            className="text-red-400 hover:text-red-600 p-0.5 rounded"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {/* CHATBOT TEXTAREA PROMPT BOX WITH UNCLIPPED DROPDOWNS & MODEL SELECTOR */}
-      <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm focus-within:border-zinc-400 focus-within:ring-2 focus-within:ring-zinc-950/5 transition-all relative">
-        {/* Auto-growing Textarea */}
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Type what your voice agent should say..."
-          rows={1}
-          maxLength={2000}
-          disabled={isLoading}
-          className="w-full p-4 text-sm text-zinc-900 placeholder:text-zinc-400 border-none outline-none focus:outline-none focus:ring-0 resize-none bg-transparent min-h-[52px] max-h-[200px] overflow-y-auto rounded-t-2xl"
-        />
-
-        {/* Bottom Toolbar inside prompt box */}
-        <div className="flex items-center justify-between px-3 py-2.5 bg-zinc-50/80 border-t border-zinc-100 rounded-b-2xl gap-2 flex-wrap sm:flex-nowrap">
-          {/* Left Hand Side: Dropdowns for Language & Voice */}
-          <div className="flex items-center gap-2">
-            {/* Language Selector Dropdown */}
-            <div className="w-[125px]">
-              <Select
-                value={selectedLanguage}
-                onValueChange={handleLanguageChange}
-                disabled={isLoading}
-              >
-                <SelectTrigger className="h-8 text-xs bg-white">
-                  <div className="flex items-center gap-1.5 truncate">
-                    <svg
-                      className="w-3.5 h-3.5 text-zinc-500 shrink-0"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 002 2h1.5a2.5 2.5 0 002.5-2.5V11a2 2 0 012-2h1.055M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    <SelectValue>
-                      {currentLangObj?.name || "Language"}
-                    </SelectValue>
-                  </div>
-                </SelectTrigger>
-                <SelectContent side="bottom" align="start">
-                  {SUPPORTED_LANGUAGES.map((lang) => (
-                    <SelectItem key={lang.id} value={lang.id}>
-                      {lang.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Voice Selector Dropdown */}
-            <div className="w-[155px] sm:w-[175px]">
-              <Select
-                value={selectedVoice}
-                onValueChange={setSelectedVoice}
-                disabled={isLoading}
-              >
-                <SelectTrigger className="h-8 text-xs bg-white">
-                  <div className="flex items-center gap-1.5 truncate">
-                    <svg
-                      className="w-3.5 h-3.5 text-zinc-500 shrink-0"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"
-                      />
-                    </svg>
-                    <SelectValue>
-                      {currentVoiceObj?.name || "Voice"}
-                    </SelectValue>
-                  </div>
-                </SelectTrigger>
-                <SelectContent side="bottom" align="start">
-                  {filteredVoices.map((voice) => (
-                    <SelectItem key={voice.id} value={voice.id}>
-                      {voice.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Right Hand Side: Character Counter, Model Selector Dropdown & Icon-Only Generate Button */}
-          <div className="flex items-center gap-2">
-            {/* Character Count */}
-            <span className="text-[11px] select-none font-mono text-zinc-400 px-1">
-              {text.length}/2000
-            </span>
-
-            {/* Model Selector Dropdown with Full Name display */}
-            <div className="w-auto min-w-[120px] max-w-[185px]">
-              <Select
-                value={selectedModel}
-                onValueChange={setSelectedModel}
-                disabled={isLoading}
-              >
-                <SelectTrigger className="h-8 text-xs bg-white border-zinc-200">
-                  <div className="flex items-center gap-1 truncate">
-                    <svg
-                      className="w-3.5 h-3.5 text-zinc-500 shrink-0"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M13 10V3L4 14h7v7l9-11h-7z"
-                      />
-                    </svg>
-                    <SelectValue>
-                      {MODEL_OPTIONS[selectedModel] || selectedModel}
-                    </SelectValue>
-                  </div>
-                </SelectTrigger>
-                <SelectContent
-                  side="bottom"
-                  align="end"
-                  className="min-w-[190px]"
-                >
-                  <SelectItem value="kokoro">Kokoro 82M</SelectItem>
-                  <SelectItem value="elevenlabs" disabled>
-                    ElevenLabs (Coming Soon)
-                  </SelectItem>
-                  <SelectItem value="xtts" disabled>
-                    XTTS v2 (Coming Soon)
-                  </SelectItem>
-                  <SelectItem value="chattts" disabled>
-                    ChatTTS (Coming Soon)
-                  </SelectItem>
-                  <SelectItem value="f5tts" disabled>
-                    F5-TTS (Coming Soon)
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Icon-Only Generate Button */}
-            <Button
-              onClick={handleGenerate}
-              disabled={isLoading || !text.trim()}
-              size="icon"
-              title="Generate Speech"
-              className="h-8 w-8 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white transition-all flex items-center justify-center shadow-sm disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-            >
-              {isLoading ? (
-                <svg
-                  className="animate-spin h-3.5 w-3.5 text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-              ) : (
-                <svg
-                  className="w-4 h-4 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2.5"
-                    d="M5 10l7-7m0 0l7 7m-7-7v18"
-                  />
-                </svg>
-              )}
-            </Button>
-          </div>
-        </div>
+      {/* Input bar pinned at bottom */}
+      <div className="shrink-0 pt-2 pb-1">
+        <ChatInput onSend={handleSend} />
       </div>
     </div>
   );
