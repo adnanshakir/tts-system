@@ -23,8 +23,8 @@ export async function getTTS(): Promise<KokoroTTS> {
     console.log("Initializing Kokoro TTS model (cacheDir: /tmp/hf_home)...");
 
     ttsPromise = KokoroTTS.from_pretrained(MODEL, {
-      dtype: "q8",
-      device: "wasm",
+      dtype: process.env.VERCEL ? "q8" : "fp32",
+      device: "cpu",
     }).catch((error) => {
       console.error("Failed to load Kokoro model:", error);
       ttsPromise = null;

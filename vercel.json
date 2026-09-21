@@ -1,4 +1,5 @@
 {
+  "installCommand": "npm pkg set 'overrides.onnxruntime-node'='npm:onnxruntime-web@*' && npm install",
   "functions": {
     "src/app/api/tts/route.ts": {
       "maxDuration": 60,
