@@ -2,9 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: [
-    "kokoro-js",
-    "@huggingface/transformers",
+    "onnxruntime-web",
   ],
+  turbopack: {
+    resolveAlias: {
+      "onnxruntime-node": "onnxruntime-web",
+    },
+  },
 };
 
 export default nextConfig;
