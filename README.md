@@ -14,7 +14,7 @@ Text-to-Speech system powered by Next.js and Kokoro TTS with a Python FastAPI G2
 Install dependencies and start the G2P FastAPI server:
 
 ```bash
-pip install -r requirements.txt
+pip install -r python/requirements.txt
 uvicorn python.g2p:app --host 0.0.0.0 --port 8000
 ```
 
