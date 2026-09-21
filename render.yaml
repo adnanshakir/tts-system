@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: hindi-g2p
+    runtime: docker
+    dockerfilePath: ./python/Dockerfile
+    dockerContext: ./python
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "10000"
