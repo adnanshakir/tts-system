@@ -25,12 +25,34 @@ function useSelectContext() {
 export interface SelectProps {
   value: string;
   onValueChange: (value: string) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   disabled?: boolean;
   children: React.ReactNode;
 }
 
-export function Select({ value, onValueChange, disabled, children }: SelectProps) {
-  const [open, setOpen] = React.useState(false);
+export function Select({
+  value,
+  onValueChange,
+  open: controlledOpen,
+  onOpenChange,
+  disabled,
+  children,
+}: SelectProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+
+  const setOpen = React.useCallback(
+    (newOpen: boolean) => {
+      if (disabled) return;
+      if (controlledOpen === undefined) {
+        setUncontrolledOpen(newOpen);
+      }
+      onOpenChange?.(newOpen);
+    },
+    [disabled, controlledOpen, onOpenChange],
+  );
+
   const [labels, setLabels] = React.useState<Record<string, React.ReactNode>>({});
 
   const registerLabel = React.useCallback((val: string, label: React.ReactNode) => {
@@ -39,7 +61,7 @@ export function Select({ value, onValueChange, disabled, children }: SelectProps
 
   return (
     <SelectContext.Provider
-      value={{ value, onValueChange, open, setOpen: disabled ? () => {} : setOpen, labels, registerLabel }}
+      value={{ value, onValueChange, open, setOpen, labels, registerLabel }}
     >
       <div className="relative inline-block w-full">{children}</div>
     </SelectContext.Provider>

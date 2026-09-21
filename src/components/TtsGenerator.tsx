@@ -24,57 +24,6 @@ export default function TtsGenerator() {
     };
   }, []);
 
-  const handleRetry = useCallback((messageId: string) => {
-    // Find the assistant message and its corresponding user message
-    setMessages((prev) => {
-      const assistantIdx = prev.findIndex((m) => m.id === messageId);
-      if (assistantIdx === -1) return prev;
-
-      const assistantMsg = prev[assistantIdx];
-      // Find the user message right before it
-      let userMsg: ChatMessageData | null = null;
-      for (let i = assistantIdx - 1; i >= 0; i--) {
-        if (prev[i].type === "user") {
-          userMsg = prev[i];
-          break;
-        }
-      }
-      if (!userMsg) return prev;
-
-      // Update the assistant message to loading
-      const updated = [...prev];
-      updated[assistantIdx] = { ...assistantMsg, status: "loading", error: undefined };
-      return updated;
-    });
-
-    // Re-trigger the API call
-    setMessages((prev) => {
-      const assistantMsg = prev.find((m) => m.id === messageId);
-      if (!assistantMsg) return prev;
-
-      // Find user message before it
-      const assistantIdx = prev.findIndex((m) => m.id === messageId);
-      let userMsg: ChatMessageData | null = null;
-      for (let i = assistantIdx - 1; i >= 0; i--) {
-        if (prev[i].type === "user") {
-          userMsg = prev[i];
-          break;
-        }
-      }
-      if (!userMsg) return prev;
-
-      // Fire API call
-      generateAudio(
-        userMsg.text,
-        (assistantMsg.languageName ? SUPPORTED_LANGUAGES.find((l) => l.name === assistantMsg.languageName)?.id as Language : "en") || "en",
-        assistantMsg.voice || "af_bella",
-        messageId,
-      );
-
-      return prev;
-    });
-  }, []);
-
   const generateAudio = useCallback(
     async (
       text: string,
@@ -105,15 +54,19 @@ export default function TtsGenerator() {
               : m,
           ),
         );
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("TTS generation error:", err);
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : "An error occurred while generating speech.";
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsgId
               ? {
                   ...m,
                   status: "error" as const,
-                  error: err.message || "An error occurred while generating speech.",
+                  error: errorMessage,
                 }
               : m,
           ),
@@ -121,6 +74,45 @@ export default function TtsGenerator() {
       }
     },
     [],
+  );
+
+  const handleRetry = useCallback(
+    (messageId: string) => {
+      const assistantIdx = messages.findIndex((m) => m.id === messageId);
+      if (assistantIdx === -1) return;
+
+      const assistantMsg = messages[assistantIdx];
+      let userMsg: ChatMessageData | null = null;
+      for (let i = assistantIdx - 1; i >= 0; i--) {
+        if (messages[i].type === "user") {
+          userMsg = messages[i];
+          break;
+        }
+      }
+      if (!userMsg) return;
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, status: "loading" as const, error: undefined }
+            : m,
+        ),
+      );
+
+      const language =
+        (assistantMsg.languageName
+          ? (SUPPORTED_LANGUAGES.find((l) => l.name === assistantMsg.languageName)
+              ?.id as Language)
+          : "en") || "en";
+
+      generateAudio(
+        userMsg.text,
+        language,
+        assistantMsg.voice || "af_bella",
+        messageId,
+      );
+    },
+    [generateAudio, messages],
   );
 
   const handleSend = useCallback(
@@ -171,7 +163,7 @@ export default function TtsGenerator() {
   // ── Empty state: heading + centered input ──
   if (!hasMessages) {
     return (
-      <div className="w-full max-w-2xl mx-auto flex flex-col h-[calc(100vh-80px)] items-center justify-center">
+      <div className="w-full max-w-2xl mx-auto flex flex-col h-[calc(100vh-44px)] items-center justify-center">
         <WelcomeHeader />
         <div className="w-full mt-4">
           <ChatInput onSend={handleSend} />
@@ -182,14 +174,14 @@ export default function TtsGenerator() {
 
   // ── Chat state: feed fills space, input pinned at bottom ──
   return (
-    <div className="w-full max-w-2xl mx-auto flex flex-col h-[calc(100vh-80px)]">
+    <div className="w-full max-w-2xl mx-auto flex flex-col h-[calc(100vh-44px)]">
       {/* Chat feed takes all available space */}
-      <div className="flex-1 overflow-hidden flex flex-col pt-4 min-h-0">
+      <div className="flex-1 overflow-hidden flex flex-col pt-2 min-h-0">
         <ChatFeed messages={messages} onRetry={handleRetry} />
       </div>
 
       {/* Input bar pinned at bottom */}
-      <div className="shrink-0 pt-3 pb-4">
+      <div className="shrink-0 pt-2 pb-1">
         <ChatInput onSend={handleSend} />
       </div>
     </div>

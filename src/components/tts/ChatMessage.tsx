@@ -56,11 +56,11 @@ export default function ChatMessage({ message, onRetry }: ChatMessageProps) {
     );
   }
 
-  // ── Assistant Bubble ─────────────────────────────────────────
+  // ── Assistant Response ───────────────────────────────────────
   return (
     <div className="flex justify-start animate-msg-in">
       <div className="max-w-[85%] sm:max-w-[75%] w-full">
-        <div className="bg-white border border-zinc-200 px-4 py-3 rounded-2xl rounded-bl-md shadow-sm space-y-2.5">
+        <div className="space-y-2.5 py-1 px-1">
           {/* ── Loading State: spinner + shimmer text ─── */}
           {message.status === "loading" && <ShimmerBlock />}
 
@@ -116,7 +116,7 @@ export default function ChatMessage({ message, onRetry }: ChatMessageProps) {
                 </span>
                 <a
                   href={message.audioUrl}
-                  download={`kokoro-${message.voice || "audio"}-${Date.now()}.wav`}
+                  download={`kokoro-${message.voice || "audio"}-${message.id}.wav`}
                   className="inline-flex items-center gap-1 text-[10px] font-medium text-zinc-500 hover:text-zinc-800 transition-colors"
                 >
                   <svg

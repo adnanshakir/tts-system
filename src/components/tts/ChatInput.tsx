@@ -34,6 +34,8 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [selectedLanguage, setSelectedLanguage] = useState<Language>("en");
   const [selectedVoice, setSelectedVoice] = useState<string>("af_bella");
   const [selectedModel, setSelectedModel] = useState<string>("kokoro");
+  const [isLangOpen, setIsLangOpen] = useState(false);
+  const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Filter voices by selected language
@@ -164,6 +166,8 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
             <Select
               value={selectedLanguage}
               onValueChange={handleLanguageChange}
+              open={isLangOpen}
+              onOpenChange={setIsLangOpen}
               disabled={disabled}
             >
               <SelectTrigger
@@ -186,10 +190,12 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
             </Select>
 
             {/* Tooltip */}
-            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center justify-center px-2.5 py-1 bg-zinc-900 text-white text-[11px] font-medium rounded-md shadow-md whitespace-nowrap pointer-events-none z-30 animate-in fade-in duration-150">
-              Language: {currentLangObj?.name || "Language"}
-              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-900" />
-            </div>
+            {!isLangOpen && (
+              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center justify-center px-2.5 py-1 bg-zinc-900 text-white text-[11px] font-medium rounded-md shadow-md whitespace-nowrap pointer-events-none z-30 animate-in fade-in duration-150">
+                Language: {currentLangObj?.name || "Language"}
+                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-900" />
+              </div>
+            )}
           </div>
 
           {/* Voice Selector */}
@@ -197,6 +203,8 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
             <Select
               value={selectedVoice}
               onValueChange={setSelectedVoice}
+              open={isVoiceOpen}
+              onOpenChange={setIsVoiceOpen}
               disabled={disabled}
             >
               <SelectTrigger
@@ -219,10 +227,12 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
             </Select>
 
             {/* Tooltip */}
-            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center justify-center px-2.5 py-1 bg-zinc-900 text-white text-[11px] font-medium rounded-md shadow-md whitespace-nowrap pointer-events-none z-30 animate-in fade-in duration-150">
-              Voice: {currentVoiceObj?.name || "Voice"}
-              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-900" />
-            </div>
+            {!isVoiceOpen && (
+              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center justify-center px-2.5 py-1 bg-zinc-900 text-white text-[11px] font-medium rounded-md shadow-md whitespace-nowrap pointer-events-none z-30 animate-in fade-in duration-150">
+                Voice: {currentVoiceObj?.name || "Voice"}
+                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-900" />
+              </div>
+            )}
           </div>
 
           {/* Send Button */}

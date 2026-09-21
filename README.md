@@ -23,6 +23,7 @@ uvicorn python.g2p:app --host 0.0.0.0 --port 8000
 Start the web server:
 
 ```bash
+npm install
 npm run dev
 ```
 
