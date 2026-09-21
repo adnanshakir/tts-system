@@ -33,11 +33,6 @@ def convert(request: G2PRequest):
             media_type="application/json; charset=utf-8",
         )
 
-    print("G2P INPUT:")
-    print(repr(request.text))
-    print("G2P INPUT CODEPOINTS:")
-    print([ord(c) for c in request.text])
-
     phonemes = g2p(request.text)
 
     return Response(

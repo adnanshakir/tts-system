@@ -13,7 +13,8 @@ if (env) {
 }
 
 const MODEL = "onnx-community/Kokoro-82M-v1.0-ONNX";
-const HINDI_G2P_URL = "http://127.0.0.1:8000/g2p";
+const HINDI_G2P_URL =
+  process.env.HINDI_G2P_URL || "http://127.0.0.1:8000/g2p";
 
 let ttsPromise: Promise<KokoroTTS> | null = null;
 
@@ -41,6 +42,7 @@ export async function getHindiPhonemes(text: string): Promise<string> {
       "Content-Type": "application/json; charset=utf-8",
     },
     body: JSON.stringify({ text }),
+    signal: AbortSignal.timeout(15000),
   });
 
   if (!response.ok) {
@@ -51,16 +53,27 @@ export async function getHindiPhonemes(text: string): Promise<string> {
     );
   }
 
-  const data = (await response.json()) as {
-    phonemes?: string;
-    error?: string;
-  };
+  const data: unknown = await response.json();
 
-  if (!data.phonemes) {
-    throw new Error(data.error || "Hindi G2P returned no phonemes.");
+  const isObject = typeof data === "object" && data !== null;
+  const errorMsg =
+    isObject &&
+    "error" in data &&
+    typeof (data as { error?: unknown }).error === "string"
+      ? (data as { error: string }).error
+      : undefined;
+  const phonemes =
+    isObject &&
+    "phonemes" in data &&
+    typeof (data as { phonemes?: unknown }).phonemes === "string"
+      ? (data as { phonemes: string }).phonemes
+      : undefined;
+
+  if (!phonemes || phonemes.trim().length === 0) {
+    throw new Error(errorMsg || "Hindi G2P returned no phonemes.");
   }
 
-  return data.phonemes;
+  return phonemes;
 }
 
 export async function generateHindi(text: string, voice: string) {
