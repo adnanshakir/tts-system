@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/tts": [
       "./node_modules/onnxruntime-node/bin/napi-v3/linux/x64/**/*",
+      "./node_modules/kokoro-js/voices/**/*",
     ],
   },
 };
