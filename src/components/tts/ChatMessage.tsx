@@ -139,12 +139,14 @@ export default function ChatMessage({ message, onRetry }: ChatMessageProps) {
           )}
         </div>
 
-        {/* Timestamp */}
-        <div className="flex justify-start mt-1 px-1">
-          <span className="text-[10px] text-zinc-400">
-            {message.timestamp}
-          </span>
-        </div>
+        {/* Timestamp — only show once response is delivered */}
+        {(message.status === "done" || message.status === "error") && (
+          <div className="flex justify-start mt-1 px-1">
+            <span className="text-[10px] text-zinc-400">
+              {message.timestamp}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

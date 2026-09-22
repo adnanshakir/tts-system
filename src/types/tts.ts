@@ -42,8 +42,8 @@ export const KOKORO_VOICES: TTSVoice[] = [
   { id: 'bm_fable', name: 'Fable (British)', language: 'en', gender: 'male', accent: 'UK' },
 
   // Hindi
-  { id: 'hf_alpha', name: 'Alpha (Hindi Female)', language: 'hi', gender: 'female', accent: 'IN' },
-  { id: 'hf_beta', name: 'Beta (Hindi Female)', language: 'hi', gender: 'female', accent: 'IN' },
-  { id: 'hm_omega', name: 'Omega (Hindi Male)', language: 'hi', gender: 'male', accent: 'IN' },
-  { id: 'hm_psi', name: 'Psi (Hindi Male)', language: 'hi', gender: 'male', accent: 'IN' },
+  { id: 'hf_alpha', name: 'Ananya (Hindi)', language: 'hi', gender: 'female', accent: 'IN' },
+  { id: 'hf_beta', name: 'Priya (Hindi)', language: 'hi', gender: 'female', accent: 'IN' },
+  { id: 'hm_omega', name: 'Rohan (Hindi)', language: 'hi', gender: 'male', accent: 'IN' },
+  { id: 'hm_psi', name: 'Kabir (Hindi)', language: 'hi', gender: 'male', accent: 'IN' },
 ];
