@@ -33,7 +33,8 @@ def convert(request: G2PRequest):
             media_type="application/json; charset=utf-8",
         )
 
-    phonemes = g2p(request.text)
+    result = g2p(request.text)
+    phonemes = result[0] if isinstance(result, tuple) else result
 
     return Response(
         content=json.dumps(
