@@ -1,13 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: [
-    "onnxruntime-web",
-  ],
-  turbopack: {
-    resolveAlias: {
-      "onnxruntime-node": "onnxruntime-web",
-    },
+  serverExternalPackages: ["kokoro-js", "@huggingface/transformers", "onnxruntime-node"],
+  outputFileTracingIncludes: {
+    "/api/tts": [
+      "./node_modules/onnxruntime-node/bin/napi-v3/linux/x64/**/*",
+    ],
   },
 };
 
