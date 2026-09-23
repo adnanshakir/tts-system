@@ -102,8 +102,8 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
 
       {/* Bottom Toolbar inside prompt box */}
       <div className="flex items-center justify-between px-3 py-2.5 bg-zinc-50/80 border-t border-zinc-100 rounded-b-2xl gap-2 flex-wrap sm:flex-nowrap">
-        {/* Left Hand Side: Model Selector & Character Counter */}
-        <div className="flex items-center gap-2">
+        {/* Left Hand Side: Model Selector & Character Counter + Estimation */}
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Model Selector Dropdown */}
           <div className="w-auto min-w-[120px] max-w-[185px]">
             <Select
@@ -153,10 +153,19 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
             </Select>
           </div>
 
-          {/* Character Count */}
-          <span className="text-[11px] select-none font-mono text-zinc-400 px-1">
-            {text.length}/2000
-          </span>
+          {/* Character Count & Stream Estimation */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] select-none font-mono text-zinc-400 px-1">
+              {text.length}/2000
+            </span>
+            {text.trim().length > 0 && (
+              <span className="text-[10px] font-mono text-zinc-500 bg-zinc-200/60 px-1.5 py-0.5 rounded select-none">
+                ~{Math.max(1, Math.ceil(text.length / 350))}{" "}
+                {Math.ceil(text.length / 350) === 1 ? "chunk" : "chunks"} · ~
+                {Math.max(1, Math.ceil(text.length / (selectedLanguage === "hi" ? 12 : 15)))}s speech
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Right Hand Side: Language & Voice selectors + Send Button */}

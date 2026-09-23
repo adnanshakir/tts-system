@@ -1,5 +1,8 @@
 {
   "installCommand": "bash scripts/vercel-install.sh",
+  "env": {
+    "VERCEL_FORCE_NODEJS_STREAMING": "true"
+  },
   "functions": {
     "src/app/api/tts/route.ts": {
       "maxDuration": 60,

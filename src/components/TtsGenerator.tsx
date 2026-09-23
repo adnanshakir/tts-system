@@ -6,6 +6,7 @@ import WelcomeHeader from "./tts/WelcomeHeader";
 import ChatFeed from "./tts/ChatFeed";
 import ChatInput from "./tts/ChatInput";
 import type { ChatMessageData } from "./tts/ChatMessage";
+import { streamAndPlayAudio } from "@/lib/audioStream";
 
 let messageIdCounter = 0;
 function nextId() {
@@ -16,10 +17,14 @@ function nextId() {
 export default function TtsGenerator() {
   const [messages, setMessages] = useState<ChatMessageData[]>([]);
   const audioUrlsRef = useRef<string[]>([]);
+  const activeAbortControllerRef = useRef<AbortController | null>(null);
 
-  // Cleanup all blob URLs on unmount
+  // Cleanup all blob URLs & active controller on unmount
   useEffect(() => {
     return () => {
+      if (activeAbortControllerRef.current) {
+        activeAbortControllerRef.current.abort();
+      }
       audioUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
@@ -31,30 +36,55 @@ export default function TtsGenerator() {
       voice: string,
       assistantMsgId: string,
     ) => {
+      // Abort active stream if user triggers a new generation
+      if (activeAbortControllerRef.current) {
+        activeAbortControllerRef.current.abort();
+      }
+
+      const controller = new AbortController();
+      activeAbortControllerRef.current = controller;
+
       try {
-        const response = await fetch("/api/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, language, voice }),
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId
+              ? { ...m, status: "loading" as const, error: undefined }
+              : m,
+          ),
+        );
+
+        const result = await streamAndPlayAudio({
+          text,
+          language,
+          voice,
+          signal: controller.signal,
+          onChunk: (chunkIdx) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      status: "streaming" as const,
+                      chunkCount: chunkIdx,
+                    }
+                  : m,
+              ),
+            );
+          },
         });
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `Server error (${response.status})`);
-        }
-
-        const blob = await response.blob();
-        const audioUrl = URL.createObjectURL(blob);
-        audioUrlsRef.current.push(audioUrl);
+        audioUrlsRef.current.push(result.audioUrl);
 
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsgId
-              ? { ...m, status: "done" as const, audioUrl }
+              ? { ...m, status: "done" as const, audioUrl: result.audioUrl }
               : m,
           ),
         );
       } catch (err: unknown) {
+        if (controller.signal.aborted) return;
+
         console.error("TTS generation error:", err);
         const errorMessage =
           err instanceof Error
@@ -71,6 +101,10 @@ export default function TtsGenerator() {
               : m,
           ),
         );
+      } finally {
+        if (activeAbortControllerRef.current === controller) {
+          activeAbortControllerRef.current = null;
+        }
       }
     },
     [],
@@ -90,14 +124,6 @@ export default function TtsGenerator() {
         }
       }
       if (!userMsg) return;
-
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === messageId
-            ? { ...m, status: "loading" as const, error: undefined }
-            : m,
-        ),
-      );
 
       const language =
         (assistantMsg.languageName
@@ -152,7 +178,6 @@ export default function TtsGenerator() {
 
       setMessages((prev) => [...prev, userMsg, assistantMsg]);
 
-      // Fire the API call
       generateAudio(text, settings.language, settings.voice, assistantMsgId);
     },
     [generateAudio],

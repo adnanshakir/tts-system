@@ -11,7 +11,8 @@ export interface ChatMessageData {
   voiceName?: string;
   languageName?: string;
   timestamp: string;
-  status: "sending" | "loading" | "done" | "error";
+  status: "sending" | "loading" | "streaming" | "done" | "error";
+  chunkCount?: number;
   error?: string;
   voice?: string;
 }
@@ -24,7 +25,7 @@ interface ChatMessageProps {
 export default function ChatMessage({ message, onRetry }: ChatMessageProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Auto-play when audio becomes available
+  // Auto-play when audio becomes available (fallback for stitched blob)
   useEffect(() => {
     if (message.status === "done" && message.audioUrl && audioRef.current) {
       const timer = setTimeout(() => {
@@ -64,6 +65,22 @@ export default function ChatMessage({ message, onRetry }: ChatMessageProps) {
           {/* ── Loading State: spinner + shimmer text ─── */}
           {message.status === "loading" && <ShimmerBlock />}
 
+          {/* ── Streaming State: real-time indicator ─── */}
+          {message.status === "streaming" && (
+            <div className="flex items-center gap-2 py-2.5 px-3 bg-zinc-100 border border-zinc-200 text-zinc-800 rounded-xl text-xs font-medium">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>
+                Receiving audio stream{" "}
+                {typeof message.chunkCount === "number"
+                  ? `(chunk ${message.chunkCount + 1})`
+                  : "..."}
+              </span>
+            </div>
+          )}
+
           {/* ── Error State ──── */}
           {message.status === "error" && (
             <div className="space-y-2">
@@ -96,10 +113,10 @@ export default function ChatMessage({ message, onRetry }: ChatMessageProps) {
             </div>
           )}
 
-          {/* ── Done State: Minimal audio player ─── */}
+          {/* ── Done State: Minimal audio player for stitched audio ─── */}
           {message.status === "done" && message.audioUrl && (
             <div className="space-y-2">
-              {/* Audio player — clean, no extra wrapper */}
+              {/* Audio player */}
               <audio
                 ref={audioRef}
                 controls
@@ -139,7 +156,7 @@ export default function ChatMessage({ message, onRetry }: ChatMessageProps) {
           )}
         </div>
 
-        {/* Timestamp — only show once response is delivered */}
+        {/* Timestamp — show when finished or on error */}
         {(message.status === "done" || message.status === "error") && (
           <div className="flex justify-start mt-1 px-1">
             <span className="text-[10px] text-zinc-400">
