@@ -1,4 +1,4 @@
-import { KokoroTTS, TextSplitterStream } from "kokoro-js";
+import { KokoroTTS } from "kokoro-js";
 import { env } from "@huggingface/transformers";
 
 // ── HuggingFace cache configuration ────────────────────────────────
@@ -229,16 +229,11 @@ export async function* streamEnglish(
   signal?: AbortSignal,
 ) {
   const tts = await getTTS();
-  const splitter = new TextSplitterStream();
-  const stream = tts.stream(splitter, { voice: voice as any });
+  const chunks = splitIntoChunks(text); // same 350-char default as Hindi
 
-  splitter.push(text);
-  splitter.close();
-
-  for await (const { audio } of stream) {
-    if (signal?.aborted) {
-      break;
-    }
+  for (const chunk of chunks) {
+    if (signal?.aborted) break;
+    const audio = await tts.generate(chunk, { voice: voice as any });
     yield audio;
   }
 }
