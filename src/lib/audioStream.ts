@@ -159,10 +159,13 @@ export async function streamAndPlayAudio(
   let nextStartTime = 0;
 
   const wavBuffers: ArrayBuffer[] = [];
+  let success = false;
 
   try {
     while (true) {
-      if (signal?.aborted) break;
+      if (signal?.aborted) {
+        throw signal.reason ?? new DOMException("Aborted", "AbortError");
+      }
 
       const { done, value } = await reader.read();
       if (done) break;
@@ -218,16 +221,20 @@ export async function streamAndPlayAudio(
         }
       }
     }
+
+    if (wavBuffers.length === 0) {
+      throw new Error("No audio chunks received from server.");
+    }
+
+    const finalBlob = stitchWavChunks(wavBuffers);
+    const audioUrl = URL.createObjectURL(finalBlob);
+
+    success = true;
+    return { blob: finalBlob, audioUrl, audioContext };
   } finally {
     reader.releaseLock();
+    if (!success && audioContext.state !== "closed") {
+      audioContext.close().catch(() => {});
+    }
   }
-
-  if (wavBuffers.length === 0) {
-    throw new Error("No audio chunks received from server.");
-  }
-
-  const finalBlob = stitchWavChunks(wavBuffers);
-  const audioUrl = URL.createObjectURL(finalBlob);
-
-  return { blob: finalBlob, audioUrl, audioContext };
 }

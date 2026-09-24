@@ -83,7 +83,22 @@ export default function TtsGenerator() {
           ),
         );
       } catch (err: unknown) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) {
+          const errorMessage =
+            err instanceof Error ? err.message : "Generation aborted.";
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsgId
+                ? {
+                    ...m,
+                    status: "error" as const,
+                    error: errorMessage,
+                  }
+                : m,
+            ),
+          );
+          return;
+        }
 
         console.error("TTS generation error:", err);
         const errorMessage =

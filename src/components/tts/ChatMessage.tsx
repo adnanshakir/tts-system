@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useEffect } from "react";
+import React from "react";
 import ShimmerBlock from "./ShimmerBlock";
 
 export interface ChatMessageData {
@@ -23,19 +23,6 @@ interface ChatMessageProps {
 }
 
 export default function ChatMessage({ message, onRetry }: ChatMessageProps) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  // Auto-play when audio becomes available (fallback for stitched blob)
-  useEffect(() => {
-    if (message.status === "done" && message.audioUrl && audioRef.current) {
-      const timer = setTimeout(() => {
-        audioRef.current?.play().catch(() => {
-          // Autoplay policy fallback
-        });
-      }, 150);
-      return () => clearTimeout(timer);
-    }
-  }, [message.status, message.audioUrl]);
 
   // ── User Bubble ──────────────────────────────────────────────
   if (message.type === "user") {
@@ -118,7 +105,6 @@ export default function ChatMessage({ message, onRetry }: ChatMessageProps) {
             <div className="space-y-2">
               {/* Audio player */}
               <audio
-                ref={audioRef}
                 controls
                 src={message.audioUrl}
                 className="w-full h-9 focus:outline-none"

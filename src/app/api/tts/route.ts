@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { streamEnglish, streamHindi } from "@/services/tts/kokoro";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 const ENGLISH_VOICES = [

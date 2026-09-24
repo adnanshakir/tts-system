@@ -16,8 +16,7 @@ if (HF_CACHE) {
 env.allowLocalModels = false;
 
 const MODEL = "onnx-community/Kokoro-82M-v1.0-ONNX";
-const HINDI_G2P_URL =
-  process.env.HINDI_G2P_URL || "http://127.0.0.1:8000/g2p";
+const HINDI_G2P_URL = process.env.HINDI_G2P_URL || "http://127.0.0.1:8000/g2p";
 
 let ttsPromise: Promise<KokoroTTS> | null = null;
 
@@ -48,7 +47,10 @@ function createTimeoutSignal(
   outerSignal?: AbortSignal,
 ): AbortSignal {
   if (typeof (AbortSignal as any).any === "function" && outerSignal) {
-    return (AbortSignal as any).any([outerSignal, AbortSignal.timeout(timeoutMs)]);
+    return (AbortSignal as any).any([
+      outerSignal,
+      AbortSignal.timeout(timeoutMs),
+    ]);
   }
 
   const controller = new AbortController();
@@ -80,7 +82,11 @@ function createTimeoutSignal(
  * Splits text into sentence-aware chunks capped around maxChars (default 350).
  * Handles standard punctuation (.!?) and Devanagari danda (।).
  */
-export function splitIntoChunks(text: string, maxChars = 350): string[] {
+export function splitIntoChunks(
+  text: string,
+  maxChars = 350,
+  firstChunkMaxChars = 150,
+): string[] {
   const sentences = text.match(/[^.!?।]+[.!?।]*/g) ?? [text];
   const chunks: string[] = [];
   let current = "";
@@ -88,7 +94,10 @@ export function splitIntoChunks(text: string, maxChars = 350): string[] {
   for (const s of sentences) {
     const trimmed = s.trim();
     if (!trimmed) continue;
-    if ((current + " " + trimmed).length > maxChars && current) {
+
+    const limit = chunks.length === 0 ? firstChunkMaxChars : maxChars;
+
+    if ((current + " " + trimmed).length > limit && current) {
       chunks.push(current.trim());
       current = trimmed;
     } else {
@@ -220,16 +229,13 @@ async function getPhonemesSafely(
   return [...leftPhonemes, ...rightPhonemes];
 }
 
-/**
- * Streams English audio chunks using kokoro-js TextSplitterStream.
- */
 export async function* streamEnglish(
   text: string,
   voice: string,
   signal?: AbortSignal,
 ) {
   const tts = await getTTS();
-  const chunks = splitIntoChunks(text); // same 350-char default as Hindi
+  const chunks = splitIntoChunks(text);
 
   for (const chunk of chunks) {
     if (signal?.aborted) break;
@@ -238,31 +244,21 @@ export async function* streamEnglish(
   }
 }
 
-/**
- * Streams Hindi audio chunks using manual sentence chunking and phoneme ceiling checks.
- */
 export async function* streamHindi(
   text: string,
   voice: string,
   signal?: AbortSignal,
 ) {
   const tts = await getTTS();
-  const initialChunks = splitIntoChunks(text);
+  const chunks = splitIntoChunks(text);
 
-  for (const chunk of initialChunks) {
-    if (signal?.aborted) {
-      break;
-    }
-
+  for (const chunk of chunks) {
+    if (signal?.aborted) break;
     const phonemeList = await getPhonemesSafely(chunk, signal);
     for (const phonemes of phonemeList) {
-      if (signal?.aborted) {
-        break;
-      }
+      if (signal?.aborted) break;
       const { input_ids } = tts.tokenizer(phonemes, { truncation: false });
-      const audio = await tts.generate_from_ids(input_ids, {
-        voice: voice as any,
-      });
+      const audio = await tts.generate_from_ids(input_ids, { voice: voice as any });
       yield audio;
     }
   }
