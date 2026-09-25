@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTTS, generateHindi } from "@/services/tts/kokoro";
+import { streamEnglish, streamHindi } from "@/services/tts/kokoro";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 const ENGLISH_VOICES = [
@@ -123,35 +123,79 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `Generating ${language} audio for ${text.length} characters with voice '${voice}'...`,
+      `Streaming ${language} audio for ${text.length} characters with voice '${voice}'...`,
     );
 
     // -------------------------
-    // Generate audio
+    // Stream audio generator
     // -------------------------
 
-    const audio =
+    const generator =
       language === "hi"
-        ? await generateHindi(text.trim(), voice)
-        : await getTTS().then((tts) =>
-            tts.generate(text.trim(), {
-              voice: voice as (typeof ENGLISH_VOICES)[number],
-            }),
-          );
+        ? streamHindi(text.trim(), voice, request.signal)
+        : streamEnglish(text.trim(), voice, request.signal);
 
-    // -------------------------
-    // Convert to WAV
-    // -------------------------
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+  async start(controller) {
+    try {
+      let index = 0;
 
-    const wavArrayBuffer = await audio.toWav();
-    const wavBuffer = Buffer.from(wavArrayBuffer);
+      for await (const audio of generator) {
+        if (request.signal.aborted) {
+          break;
+        }
 
-    return new NextResponse(wavBuffer, {
+        const wav = Buffer.from(await audio.toWav());
+
+        console.log(Date.now(), "chunk generated", index);
+
+        controller.enqueue(
+          encoder.encode(
+            JSON.stringify({
+              index,
+              audio: wav.toString("base64"),
+            }) + "\n",
+          ),
+        );
+
+        index++;
+      }
+
+      if (!request.signal.aborted) {
+        controller.enqueue(
+          encoder.encode(JSON.stringify({ done: true }) + "\n"),
+        );
+      }
+    } catch (err: any) {
+      if (!request.signal.aborted) {
+        controller.enqueue(
+          encoder.encode(
+            JSON.stringify({
+              error: String(err?.message || err),
+            }) + "\n",
+          ),
+        );
+      }
+    } finally {
+      try {
+        controller.close();
+      } catch {
+        // Controller might already be closed
+      }
+    }
+  },
+
+  cancel() {
+    console.log(Date.now(), "stream cancelled");
+  },
+});
+
+    return new NextResponse(stream, {
       status: 200,
       headers: {
-        "Content-Type": "audio/wav",
-        "Content-Disposition": 'inline; filename="speech.wav"',
-        "Content-Length": wavBuffer.length.toString(),
+        "Content-Type": "application/x-ndjson",
+        "Cache-Control": "no-cache, no-transform",
       },
     });
   } catch (error: any) {
