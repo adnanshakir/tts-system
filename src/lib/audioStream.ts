@@ -113,7 +113,7 @@ export interface StreamAudioOptions {
   language: string;
   voice: string;
   signal?: AbortSignal;
-  onChunk?: (chunkIndex: number) => void;
+  onChunk?: (chunkIndex: number, accumulatedDuration: number) => void;
 }
 
 export interface StreamAudioResult {
@@ -157,6 +157,7 @@ export async function streamAndPlayAudio(
       .webkitAudioContext;
   const audioContext = new AudioCtx();
   let nextStartTime = 0;
+  let accumulatedDuration = 0;
 
   const wavBuffers: ArrayBuffer[] = [];
   let success = false;
@@ -199,15 +200,17 @@ export async function streamAndPlayAudio(
           const arrayBuffer = bytes.buffer;
           wavBuffers.push(arrayBuffer);
 
-          if (onChunk) {
-            onChunk(msg.index ?? wavBuffers.length - 1);
-          }
-
           try {
             // decodeAudioData detaches the buffer, so slice a copy for Web Audio API playback
             const audioBuf = await audioContext.decodeAudioData(
               arrayBuffer.slice(0),
             );
+            accumulatedDuration += audioBuf.duration;
+
+            if (onChunk) {
+              onChunk(msg.index ?? wavBuffers.length - 1, accumulatedDuration);
+            }
+
             const source = audioContext.createBufferSource();
             source.buffer = audioBuf;
             source.connect(audioContext.destination);
@@ -217,6 +220,9 @@ export async function streamAndPlayAudio(
             nextStartTime = startAt + audioBuf.duration;
           } catch (e) {
             console.warn("Failed to decode audio chunk for live playback:", e);
+            if (onChunk) {
+              onChunk(msg.index ?? wavBuffers.length - 1, accumulatedDuration);
+            }
           }
         }
       }
@@ -226,6 +232,21 @@ export async function streamAndPlayAudio(
       throw new Error("No audio chunks received from server.");
     }
 
+    // Wait for live Web Audio playback schedule to finish naturally before resolving
+    const remainingTimeMs = Math.max(0, (nextStartTime - audioContext.currentTime) * 1000);
+    if (remainingTimeMs > 0) {
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, remainingTimeMs);
+        if (signal) {
+          const onAbort = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+          signal.addEventListener("abort", onAbort, { once: true });
+        }
+      });
+    }
+
     const finalBlob = stitchWavChunks(wavBuffers);
     const audioUrl = URL.createObjectURL(finalBlob);
 
@@ -233,8 +254,9 @@ export async function streamAndPlayAudio(
     return { blob: finalBlob, audioUrl, audioContext };
   } finally {
     reader.releaseLock();
-    if (!success && audioContext.state !== "closed") {
+    if (audioContext.state !== "closed") {
       audioContext.close().catch(() => {});
     }
   }
 }
+

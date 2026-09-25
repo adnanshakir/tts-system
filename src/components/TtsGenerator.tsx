@@ -58,7 +58,7 @@ export default function TtsGenerator() {
           language,
           voice,
           signal: controller.signal,
-          onChunk: (chunkIdx) => {
+          onChunk: (chunkIdx, duration) => {
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === assistantMsgId
@@ -66,6 +66,7 @@ export default function TtsGenerator() {
                       ...m,
                       status: "streaming" as const,
                       chunkCount: chunkIdx,
+                      streamingDuration: duration,
                     }
                   : m,
               ),
