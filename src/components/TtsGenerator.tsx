@@ -85,8 +85,7 @@ export default function TtsGenerator() {
         );
       } catch (err: unknown) {
         if (controller.signal.aborted) {
-          const errorMessage =
-            err instanceof Error ? err.message : "Generation aborted.";
+          const errorMessage = "Generation aborted.";
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMsgId

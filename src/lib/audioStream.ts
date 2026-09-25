@@ -160,6 +160,7 @@ export async function streamAndPlayAudio(
   let accumulatedDuration = 0;
 
   const wavBuffers: ArrayBuffer[] = [];
+  let hasCompletionRecord = false;
   let success = false;
 
   try {
@@ -187,6 +188,7 @@ export async function streamAndPlayAudio(
           throw new Error(msg.error);
         }
         if (msg.done) {
+          hasCompletionRecord = true;
           continue;
         }
 
@@ -228,6 +230,10 @@ export async function streamAndPlayAudio(
       }
     }
 
+    if (!hasCompletionRecord) {
+      throw new Error("Stream closed before completion record was received.");
+    }
+
     if (wavBuffers.length === 0) {
       throw new Error("No audio chunks received from server.");
     }
@@ -245,6 +251,10 @@ export async function streamAndPlayAudio(
           signal.addEventListener("abort", onAbort, { once: true });
         }
       });
+    }
+
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException("Aborted", "AbortError");
     }
 
     const finalBlob = stitchWavChunks(wavBuffers);

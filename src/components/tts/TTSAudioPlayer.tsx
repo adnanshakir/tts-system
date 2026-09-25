@@ -93,34 +93,38 @@ export default function TTSAudioPlayer({ message, onRetry }: TTSAudioPlayerProps
     }
   }, [wavesurfer]);
 
-  // ── SHARE / COPY HANDLER ──────────────────────────────────────
-  const [copied, setCopied] = useState(false);
-
+  // ── SHARE / DOWNLOAD HANDLER ──────────────────────────────────
   const handleShare = useCallback(async () => {
     if (!audioUrl) return;
+    const fileName = `kokoro-${voice || "audio"}-${id || "speech"}.wav`;
+
+    const triggerDownload = () => {
+      const a = document.createElement("a");
+      a.href = audioUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    };
+
     try {
-      if (navigator.share) {
+      const res = await fetch(audioUrl);
+      const blob = await res.blob();
+      const file = new File([blob], fileName, { type: "audio/wav" });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           title: "Generated Audio",
           text: `TTS Audio (${voiceName || "Kokoro"})`,
-          url: audioUrl,
+          files: [file],
         });
       } else {
-        await navigator.clipboard.writeText(audioUrl);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        triggerDownload();
       }
     } catch {
-      // Fallback copy to clipboard if share fails
-      try {
-        await navigator.clipboard.writeText(audioUrl);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      } catch (err) {
-        console.warn("Failed to share/copy audio URL:", err);
-      }
+      triggerDownload();
     }
-  }, [audioUrl, voiceName]);
+  }, [audioUrl, voice, voiceName, id]);
 
   // ── 1. GENERATING STATE ──────────────────────────────────────
   if (status === "loading" || status === "sending") {
@@ -280,47 +284,26 @@ export default function TTSAudioPlayer({ message, onRetry }: TTSAudioPlayerProps
           </span>
 
           <div className="flex items-center gap-3">
-            {/* Share / Copy Button */}
+            {/* Share Button */}
             <button
               onClick={handleShare}
-              aria-label="Share audio link"
+              aria-label="Share audio"
               className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500 hover:text-zinc-900 transition-colors focus-visible:outline-2 focus-visible:outline-zinc-900"
             >
-              {copied ? (
-                <>
-                  <svg
-                    className="w-3.5 h-3.5 text-emerald-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  <span className="text-emerald-600">Copied</span>
-                </>
-              ) : (
-                <>
-                  <svg
-                    className="w-3.5 h-3.5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-                    />
-                  </svg>
-                  <span>Share</span>
-                </>
-              )}
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                />
+              </svg>
+              <span>Share</span>
             </button>
 
             {/* Download Button */}
