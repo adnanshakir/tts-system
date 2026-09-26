@@ -198,6 +198,17 @@ export default function TtsGenerator() {
     [generateAudio],
   );
 
+  const handleAbort = useCallback(() => {
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+      activeAbortControllerRef.current = null;
+    }
+  }, []);
+
+  const isGenerating =
+    messages.some((m) => m.status === "loading" || m.status === "streaming") ||
+    Boolean(activeAbortControllerRef.current);
+
   const hasMessages = messages.length > 0;
 
   // ── Empty state: heading + centered input ──
@@ -206,7 +217,11 @@ export default function TtsGenerator() {
       <div className="w-full max-w-2xl mx-auto flex flex-col h-[calc(100vh-44px)] items-center justify-center">
         <WelcomeHeader />
         <div className="w-full mt-4">
-          <ChatInput onSend={handleSend} />
+          <ChatInput
+            onSend={handleSend}
+            isGenerating={isGenerating}
+            onAbort={handleAbort}
+          />
         </div>
       </div>
     );
@@ -222,7 +237,11 @@ export default function TtsGenerator() {
 
       {/* Input bar pinned at bottom */}
       <div className="shrink-0 pt-2 pb-1">
-        <ChatInput onSend={handleSend} />
+        <ChatInput
+          onSend={handleSend}
+          isGenerating={isGenerating}
+          onAbort={handleAbort}
+        />
       </div>
     </div>
   );

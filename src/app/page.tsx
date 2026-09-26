@@ -4,12 +4,12 @@ import TtsGenerator from "@/components/TtsGenerator";
 import { useEffect } from "react";
 
 export default function Home() {
-  // send a request to the /api/warm endpoint to warm up the TTS model
+  // send a request to the /api/tts endpoint to warm up the TTS model bundle
   const timeoutMs = 30000;
   useEffect(() => {
     const t0 = Date.now();
     const id = setTimeout(() => {
-      fetch("/api/warm").catch((err) =>
+      fetch("/api/tts").catch((err) =>
         console.log("warmup api fetch failed", err),
       );
     }, timeoutMs);

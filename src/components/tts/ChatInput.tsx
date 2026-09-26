@@ -26,10 +26,17 @@ interface ChatInputProps {
     voice: string;
     model: string;
   }) => void;
+  isGenerating?: boolean;
+  onAbort?: () => void;
   disabled?: boolean;
 }
 
-export default function ChatInput({ onSend, disabled }: ChatInputProps) {
+export default function ChatInput({
+  onSend,
+  isGenerating,
+  onAbort,
+  disabled,
+}: ChatInputProps) {
   const [text, setText] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState<Language>("en");
   const [selectedVoice, setSelectedVoice] = useState<string>("af_bella");
@@ -244,28 +251,46 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
             )}
           </div>
 
-          {/* Send Button */}
-          <Button
-            onClick={handleSubmit}
-            disabled={disabled || !text.trim()}
-            size="icon"
-            title="Generate Speech"
-            className="h-8 w-8 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white transition-all flex items-center justify-center shadow-sm disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-          >
-            <svg
-              className="w-4 h-4 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {/* Send / Abort Button */}
+          {isGenerating ? (
+            <Button
+              type="button"
+              onClick={onAbort}
+              size="icon"
+              title="Cancel speech generation"
+              aria-label="Cancel speech generation"
+              className="h-8 w-8 rounded-full bg-red-600 hover:bg-red-700 text-white transition-all flex items-center justify-center shadow-sm shrink-0"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2.5"
-                d="M5 10l7-7m0 0l7 7m-7-7v18"
-              />
-            </svg>
-          </Button>
+              <svg
+                className="w-3.5 h-3.5 fill-current text-white"
+                viewBox="0 0 24 24"
+              >
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSubmit}
+              disabled={disabled || !text.trim()}
+              size="icon"
+              title="Generate Speech"
+              className="h-8 w-8 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white transition-all flex items-center justify-center shadow-sm disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            >
+              <svg
+                className="w-4 h-4 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2.5"
+                  d="M5 10l7-7m0 0l7 7m-7-7v18"
+                />
+              </svg>
+            </Button>
+          )}
         </div>
       </div>
     </div>
