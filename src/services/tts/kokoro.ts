@@ -16,24 +16,45 @@ if (HF_CACHE) {
 env.allowLocalModels = false;
 
 const MODEL = "onnx-community/Kokoro-82M-v1.0-ONNX";
-const HINDI_G2P_URL = process.env.HINDI_G2P_URL || "http://127.0.0.1:8000/g2p";
+
+/**
+ * Normalizes and returns the full /g2p endpoint URL.
+ * Handles inputs like "https://service.onrender.com", "https://service.onrender.com/", or "http://127.0.0.1:8000/g2p".
+ */
+export function getG2PEndpoint(): string {
+  const raw = (process.env.HINDI_G2P_URL || "http://127.0.0.1:8000")
+    .trim()
+    .replace(/\/+$/, "");
+  return raw.endsWith("/g2p") ? raw : `${raw}/g2p`;
+}
 
 let ttsPromise: Promise<KokoroTTS> | null = null;
 
 export async function getTTS(): Promise<KokoroTTS> {
   if (!ttsPromise) {
+    const initStart = Date.now();
     console.log(
-      `Initializing Kokoro TTS model (device: cpu, cache: ${HF_CACHE ?? "default"})...`,
+      `[TTS] cold init starting (device: cpu, cache: ${HF_CACHE ?? "default"})...`,
     );
 
     ttsPromise = KokoroTTS.from_pretrained(MODEL, {
-      dtype: "q8",
+      dtype: "fp32",
       device: "cpu",
-    }).catch((error) => {
-      console.error("Failed to load Kokoro model:", error);
-      ttsPromise = null;
-      throw error;
-    });
+    })
+      .then((tts) => {
+        console.log(`[TTS] cold init done in ${Date.now() - initStart}ms`);
+        return tts;
+      })
+      .catch((error) => {
+        console.error(
+          `[TTS] cold init FAILED after ${Date.now() - initStart}ms:`,
+          error,
+        );
+        ttsPromise = null;
+        throw error;
+      });
+  } else {
+    console.log(`[TTS] reusing already-warm model instance`);
   }
 
   return ttsPromise;
@@ -115,8 +136,10 @@ export async function getHindiPhonemes(
   text: string,
   signal?: AbortSignal,
 ): Promise<string> {
-  const maxRetries = 3;
+  const g2pUrl = getG2PEndpoint();
+  const maxRetries = 4;
   let attempt = 0;
+  let lastError: Error | null = null;
 
   while (attempt < maxRetries) {
     attempt++;
@@ -125,9 +148,10 @@ export async function getHindiPhonemes(
     }
 
     try {
-      const fetchSignal = createTimeoutSignal(15000, signal);
+      // 45s timeout to allow Render free tier cold-start
+      const fetchSignal = createTimeoutSignal(45000, signal);
 
-      const response = await fetch(HINDI_G2P_URL, {
+      const response = await fetch(g2pUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json; charset=utf-8",
@@ -142,14 +166,14 @@ export async function getHindiPhonemes(
 
         if (is5xx && attempt < maxRetries && !signal?.aborted) {
           console.warn(
-            `Hindi G2P service 5xx error (${response.status}), retrying attempt ${attempt}/${maxRetries}...`,
+            `Hindi G2P service 5xx error (${response.status}) at ${g2pUrl}, retrying attempt ${attempt}/${maxRetries}...`,
           );
-          await new Promise((res) => setTimeout(res, 1000 * attempt));
+          await new Promise((res) => setTimeout(res, 2000 * attempt));
           continue;
         }
 
         throw new Error(
-          `Hindi G2P service failed (${response.status}): ${errorText}`,
+          `Hindi G2P service failed (${response.status}) at ${g2pUrl}: ${errorText}`,
         );
       }
 
@@ -179,6 +203,7 @@ export async function getHindiPhonemes(
         throw new Error("Generation aborted by client.");
       }
 
+      lastError = err;
       const isRetryable =
         err.name === "TimeoutError" ||
         err.name === "TypeError" ||
@@ -187,9 +212,9 @@ export async function getHindiPhonemes(
 
       if (isRetryable && attempt < maxRetries) {
         console.warn(
-          `Hindi G2P network/timeout error (${err.message}), retrying attempt ${attempt}/${maxRetries}...`,
+          `Hindi G2P network/timeout error (${err.message}) at ${g2pUrl}, retrying attempt ${attempt}/${maxRetries}...`,
         );
-        await new Promise((res) => setTimeout(res, 1000 * attempt));
+        await new Promise((res) => setTimeout(res, 2000 * attempt));
         continue;
       }
 
@@ -197,7 +222,9 @@ export async function getHindiPhonemes(
     }
   }
 
-  throw new Error("Hindi G2P service unreachable after retries.");
+  throw new Error(
+    `Hindi G2P service (${g2pUrl}) unreachable after ${maxRetries} attempts: ${lastError?.message || "Network error"}`,
+  );
 }
 
 /**
@@ -229,36 +256,69 @@ async function getPhonemesSafely(
   return [...leftPhonemes, ...rightPhonemes];
 }
 
+// kokoro.ts — streamEnglish with per-chunk timing
 export async function* streamEnglish(
   text: string,
   voice: string,
   signal?: AbortSignal,
 ) {
+  const tGetTts = Date.now();
   const tts = await getTTS();
-  const chunks = splitIntoChunks(text);
+  console.log(`[EN] getTTS() resolved in ${Date.now() - tGetTts}ms`);
 
-  for (const chunk of chunks) {
+  const chunks = splitIntoChunks(text);
+  console.log(`[EN] split into ${chunks.length} chunks`);
+
+  for (let i = 0; i < chunks.length; i++) {
     if (signal?.aborted) break;
+    const chunk = chunks[i];
+
+    const t0 = Date.now();
     const audio = await tts.generate(chunk, { voice: voice as any });
+    const genMs = Date.now() - t0;
+    const audioSeconds = audio.audio.length / audio.sampling_rate; // check actual field names in kokoro-js's output type
+    console.log(
+      `[EN chunk ${i}] len=${chunk.length} chars, ${audioSeconds.toFixed(1)}s audio, took ${genMs}ms (${(genMs / 1000 / audioSeconds).toFixed(2)}x realtime)`,
+    );
     yield audio;
   }
 }
 
+// kokoro.ts — streamHindi with per-chunk + G2P timing
 export async function* streamHindi(
   text: string,
   voice: string,
   signal?: AbortSignal,
 ) {
+  const tGetTts = Date.now();
   const tts = await getTTS();
-  const chunks = splitIntoChunks(text);
+  console.log(`[HI] getTTS() resolved in ${Date.now() - tGetTts}ms`);
 
-  for (const chunk of chunks) {
+  const chunks = splitIntoChunks(text);
+  console.log(`[HI] split into ${chunks.length} chunks`);
+
+  for (let i = 0; i < chunks.length; i++) {
     if (signal?.aborted) break;
+    const chunk = chunks[i];
+
+    const tG2p = Date.now();
     const phonemeList = await getPhonemesSafely(chunk, signal);
+    console.log(
+      `[HI chunk ${i}] g2p took ${Date.now() - tG2p}ms (subchunks=${phonemeList.length})`,
+    );
+
     for (const phonemes of phonemeList) {
       if (signal?.aborted) break;
+      const t0 = Date.now();
       const { input_ids } = tts.tokenizer(phonemes, { truncation: false });
-      const audio = await tts.generate_from_ids(input_ids, { voice: voice as any });
+      const audio = await tts.generate_from_ids(input_ids, {
+        voice: voice as any,
+      });
+      const genMs = Date.now() - t0;
+      const audioSeconds = audio.audio.length / audio.sampling_rate;
+      console.log(
+        `[HI chunk ${i}] phonemes=${phonemes.length}, ${audioSeconds.toFixed(1)}s audio, took ${genMs}ms (${(genMs / 1000 / audioSeconds).toFixed(2)}x realtime)`,
+      );
       yield audio;
     }
   }

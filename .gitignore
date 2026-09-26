@@ -92,3 +92,8 @@ htmlcov/
 *.pt
 *.bin
 *.safetensors
+
+.vercel
+.env*
+
+tsconfig.tsbuildinfo

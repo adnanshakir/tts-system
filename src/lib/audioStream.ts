@@ -158,6 +158,7 @@ export async function streamAndPlayAudio(
   const audioContext = new AudioCtx();
   let nextStartTime = 0;
   let accumulatedDuration = 0;
+  let resumePromise: Promise<void> | null = null;
 
   const wavBuffers: ArrayBuffer[] = [];
   let hasCompletionRecord = false;
@@ -178,7 +179,13 @@ export async function streamAndPlayAudio(
 
       for (const line of lines) {
         if (!line.trim()) continue;
-        const msg = JSON.parse(line);
+        let msg: any;
+        try {
+          msg = JSON.parse(line);
+        } catch (e) {
+          console.warn("Failed to parse NDJSON line:", line, e);
+          continue;
+        }
 
         if (msg.index !== undefined) {
           console.log(Date.now(), "chunk received", msg.index);
@@ -203,10 +210,19 @@ export async function streamAndPlayAudio(
           wavBuffers.push(arrayBuffer);
 
           try {
+            if (audioContext.state === "suspended" && !resumePromise) {
+              // Retain the promise without awaiting inside stream loop so reading is not blocked
+              resumePromise = audioContext.resume().catch((e) => {
+                console.warn("AudioContext resume deferred/blocked:", e);
+              });
+            }
+
+            const tDecode = Date.now();
             // decodeAudioData detaches the buffer, so slice a copy for Web Audio API playback
             const audioBuf = await audioContext.decodeAudioData(
               arrayBuffer.slice(0),
             );
+            console.log(`decode took ${Date.now() - tDecode}ms for chunk ${msg.index}`);
             accumulatedDuration += audioBuf.duration;
 
             if (onChunk) {
@@ -219,6 +235,15 @@ export async function streamAndPlayAudio(
 
             const startAt = Math.max(audioContext.currentTime, nextStartTime);
             source.start(startAt);
+            console.log(
+              Date.now(),
+              "chunk scheduled to play",
+              msg.index,
+              "startAt(ctx time)=",
+              startAt,
+              "ctx.currentTime=",
+              audioContext.currentTime,
+            );
             nextStartTime = startAt + audioBuf.duration;
           } catch (e) {
             console.warn("Failed to decode audio chunk for live playback:", e);
@@ -238,19 +263,37 @@ export async function streamAndPlayAudio(
       throw new Error("No audio chunks received from server.");
     }
 
-    // Wait for live Web Audio playback schedule to finish naturally before resolving
-    const remainingTimeMs = Math.max(0, (nextStartTime - audioContext.currentTime) * 1000);
-    if (remainingTimeMs > 0) {
-      await new Promise<void>((resolve) => {
-        const timeout = setTimeout(resolve, remainingTimeMs);
-        if (signal) {
-          const onAbort = () => {
-            clearTimeout(timeout);
-            resolve();
-          };
-          signal.addEventListener("abort", onAbort, { once: true });
-        }
-      });
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException("Aborted", "AbortError");
+    }
+
+    // Await the retained resume promise before checking playback completion or closing context
+    if (resumePromise) {
+      await resumePromise.catch(() => {});
+    }
+
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException("Aborted", "AbortError");
+    }
+
+    // Wait for live Web Audio playback schedule to finish naturally before resolving (only if active & running)
+    if (audioContext.state === "running") {
+      const remainingTimeMs = Math.max(
+        0,
+        (nextStartTime - audioContext.currentTime) * 1000,
+      );
+      if (remainingTimeMs > 0) {
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(resolve, remainingTimeMs);
+          if (signal) {
+            const onAbort = () => {
+              clearTimeout(timeout);
+              resolve();
+            };
+            signal.addEventListener("abort", onAbort, { once: true });
+          }
+        });
+      }
     }
 
     if (signal?.aborted) {
@@ -263,7 +306,12 @@ export async function streamAndPlayAudio(
     success = true;
     return { blob: finalBlob, audioUrl, audioContext };
   } finally {
-    reader.releaseLock();
+    try {
+      await reader.cancel();
+    } catch {}
+    try {
+      reader.releaseLock();
+    } catch {}
     if (audioContext.state !== "closed") {
       audioContext.close().catch(() => {});
     }

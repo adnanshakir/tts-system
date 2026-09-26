@@ -1,12 +1,9 @@
 {
-  "installCommand": "bash scripts/vercel-install.sh",
   "env": {
     "VERCEL_FORCE_NODEJS_STREAMING": "true"
   },
   "functions": {
-    "src/app/api/tts/route.ts": {
-      "maxDuration": 300,
-      "memory": 2048
-    }
+    "src/app/api/tts/route.ts": { "maxDuration": 300 },
+    "src/app/api/warm/route.ts": { "maxDuration": 60 }
   }
 }
