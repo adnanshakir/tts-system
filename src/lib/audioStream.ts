@@ -158,6 +158,7 @@ export async function streamAndPlayAudio(
   const audioContext = new AudioCtx();
   let nextStartTime = 0;
   let accumulatedDuration = 0;
+  let resumePromise: Promise<void> | null = null;
 
   const wavBuffers: ArrayBuffer[] = [];
   let hasCompletionRecord = false;
@@ -209,9 +210,9 @@ export async function streamAndPlayAudio(
           wavBuffers.push(arrayBuffer);
 
           try {
-            if (audioContext.state === "suspended") {
-              // Trigger resume without awaiting it so stream reading and abort cleanup are never blocked
-              audioContext.resume().catch((e) => {
+            if (audioContext.state === "suspended" && !resumePromise) {
+              // Retain the promise without awaiting inside stream loop so reading is not blocked
+              resumePromise = audioContext.resume().catch((e) => {
                 console.warn("AudioContext resume deferred/blocked:", e);
               });
             }
@@ -260,6 +261,19 @@ export async function streamAndPlayAudio(
 
     if (wavBuffers.length === 0) {
       throw new Error("No audio chunks received from server.");
+    }
+
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException("Aborted", "AbortError");
+    }
+
+    // Await the retained resume promise before checking playback completion or closing context
+    if (resumePromise) {
+      await resumePromise.catch(() => {});
+    }
+
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException("Aborted", "AbortError");
     }
 
     // Wait for live Web Audio playback schedule to finish naturally before resolving (only if active & running)

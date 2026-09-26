@@ -205,9 +205,9 @@ export default function TtsGenerator() {
     }
   }, []);
 
-  const isGenerating =
-    messages.some((m) => m.status === "loading" || m.status === "streaming") ||
-    Boolean(activeAbortControllerRef.current);
+  const isGenerating = messages.some(
+    (m) => m.status === "loading" || m.status === "streaming",
+  );
 
   const hasMessages = messages.length > 0;
 
