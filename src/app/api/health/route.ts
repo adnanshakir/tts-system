@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const base = process.env.HINDI_G2P_URL;
+  const raw = (process.env.HINDI_G2P_URL || "").trim().replace(/\/+$/, "");
+  const base = raw.endsWith("/g2p") ? raw.slice(0, -4) : raw;
 
   if (!base) {
     return NextResponse.json(
