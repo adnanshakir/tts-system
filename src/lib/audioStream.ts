@@ -203,10 +203,16 @@ export async function streamAndPlayAudio(
           wavBuffers.push(arrayBuffer);
 
           try {
+            if (audioContext.state === "suspended") {
+              await audioContext.resume();
+            }
+
+            const tDecode = Date.now();
             // decodeAudioData detaches the buffer, so slice a copy for Web Audio API playback
             const audioBuf = await audioContext.decodeAudioData(
               arrayBuffer.slice(0),
             );
+            console.log(`decode took ${Date.now() - tDecode}ms for chunk ${msg.index}`);
             accumulatedDuration += audioBuf.duration;
 
             if (onChunk) {
@@ -219,6 +225,15 @@ export async function streamAndPlayAudio(
 
             const startAt = Math.max(audioContext.currentTime, nextStartTime);
             source.start(startAt);
+            console.log(
+              Date.now(),
+              "chunk scheduled to play",
+              msg.index,
+              "startAt(ctx time)=",
+              startAt,
+              "ctx.currentTime=",
+              audioContext.currentTime,
+            );
             nextStartTime = startAt + audioBuf.duration;
           } catch (e) {
             console.warn("Failed to decode audio chunk for live playback:", e);
