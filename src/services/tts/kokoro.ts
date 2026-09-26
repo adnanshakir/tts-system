@@ -38,7 +38,7 @@ export async function getTTS(): Promise<KokoroTTS> {
     );
 
     ttsPromise = KokoroTTS.from_pretrained(MODEL, {
-      dtype: "q8",
+      dtype: "fp32",
       device: "cpu",
     })
       .then((tts) => {
